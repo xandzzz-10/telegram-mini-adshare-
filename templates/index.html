@@ -1,0 +1,105 @@
+<!-- templates/index.html -->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Ad Share — Telegram Mini App</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 16px; }
+    .box { max-width: 720px; margin: auto; }
+    input[type=file] { display: block; margin-bottom: 12px; }
+    button { padding: 10px 14px; font-size: 16px; }
+    .status { margin-top: 12px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Ad Share Calculator (Telegram Mini App)</h2>
+    <p>Загрузите два файла: основной и файл расходов. Нажмите «Рассчитать» — и получите результат.</p>
+
+    <label>Основной файл (main.xlsx)</label>
+    <input id="mainFile" type="file" accept=".xlsx,.xls" />
+
+    <label>Файл расходов (payments.xlsx)</label>
+    <input id="payFile" type="file" accept=".xlsx,.xls" />
+
+    <button id="sendBtn">Рассчитать</button>
+    <div class="status" id="status"></div>
+
+    <hr/>
+    <p>Протестировать на примере загруженных файлов (только локально):</p>
+    <button id="useSample">Использовать тестовые файлы на сервере</button>
+    <div style="margin-top:16px;">
+      <small>Если приложение запускается из Telegram, при нажатии WebApp автоматически закроется — пользователь получит файл в браузере.</small>
+    </div>
+  </div>
+
+<script>
+  const statusEl = document.getElementById('status');
+
+  async function uploadAndProcess(mainBlob, payBlob) {
+    statusEl.textContent = 'Отправка файлов на сервер...';
+    const fd = new FormData();
+    fd.append('main_file', new Blob([mainBlob]), 'main.xlsx');
+    fd.append('payments_file', new Blob([payBlob]), 'payments.xlsx');
+
+    try {
+      const resp = await fetch(window.location.href + 'process', {
+        method: 'POST',
+        body: fd
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        statusEl.textContent = 'Ошибка сервера: ' + resp.status + ' ' + txt;
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'main_with_ads.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      statusEl.textContent = 'Готово — файл скачан.';
+    } catch (err) {
+      statusEl.textContent = 'Ошибка: ' + err.message;
+    }
+  }
+
+  document.getElementById('sendBtn').addEventListener('click', async () => {
+    const mainFile = document.getElementById('mainFile').files[0];
+    const payFile = document.getElementById('payFile').files[0];
+    if (!mainFile || !payFile) {
+      statusEl.textContent = 'Пожалуйста, выберите оба файла.';
+      return;
+    }
+    const mainBuf = await mainFile.arrayBuffer();
+    const payBuf = await payFile.arrayBuffer();
+    await uploadAndProcess(mainBuf, payBuf);
+  });
+
+  // Кнопка для теста: использовать серверные примеры (только если они доступны)
+  document.getElementById('useSample').addEventListener('click', async () => {
+    statusEl.textContent = 'Запрос тестовых файлов на сервер...';
+    try {
+      // Серверу мы можем передать специальный флаг — но для простоты сделаем fetch к пути /process с использованием
+      // уже находящихся на сервере файлов (если backend поддержит). В текущем backend такого пути нет.
+      // Поэтому предложим пользователю скачать файл напрямую по специальному URL, если он доступен.
+      // В продакшне можно добавить отдельный эндпоинт, который вернёт тестовые файлы.
+      statusEl.textContent = 'Тестовая опция доступна локально (см. README) — на проде загружайте свои файлы.';
+    } catch (err) {
+      statusEl.textContent = 'Ошибка: ' + err.message;
+    }
+  });
+
+  // Telegram WebApp init (опционально)
+  if (window.Telegram && window.Telegram.WebApp) {
+    try {
+      window.Telegram.WebApp.expand();
+    } catch(e){}
+  }
+</script>
+</body>
+</html>
