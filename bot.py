@@ -1,23 +1,24 @@
-# bot.py
-import os
-from telegram import Bot, Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-WEBAPP_URL = os.environ.get("WEBAPP_URL")  # например https://your-render-service.onrender.com/
+TOKEN = "8583826837:AAGJI6Qf5QvI_GXva_xzWs9Eo1i96jKLJC0"
 
-if not TOKEN or not WEBAPP_URL:
-    print("Установите переменные окружения TELEGRAM_BOT_TOKEN и WEBAPP_URL")
-    raise SystemExit
+WEBAPP_URL = "https://telegram-mini-adshare-afxx.onrender.com/webapp"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [KeyboardButton("Открыть MiniApp", web_app=WebAppInfo(url=https://telegram-mini-adshare-afxx.onrender.com/webapp))]
+    keyboard = [
+        [KeyboardButton("📊 Открыть приложение", web_app=WebAppInfo(url=WEBAPP_URL))]
     ]
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Откройте Mini App:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 
-if __name__ == "__main__":
+    await update.message.reply_text(
+        "Добро пожаловать! 👋\nНажмите кнопку ниже, чтобы открыть мини-приложение:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    print("Бот запущен. Отправьте /start в Telegram.")
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
