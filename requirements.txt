@@ -2,6 +2,7 @@ fastapi
 uvicorn
 jinja2
 python-multipart
-python-telegram-bot==20.7
 pandas
 openpyxl
+python-telegram-bot==20.3
+
