@@ -1,105 +1,159 @@
-<!-- templates/index.html -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <title>Ad Share — Telegram Mini App</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 16px; }
-    .box { max-width: 720px; margin: auto; }
-    input[type=file] { display: block; margin-bottom: 12px; }
-    button { padding: 10px 14px; font-size: 16px; }
-    .status { margin-top: 12px; color: #333; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdShare Calculator</title>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f6f7fb;
+            color: #222;
+        }
+
+        .container {
+            max-width: 420px;
+            margin: auto;
+            background: white;
+            padding: 22px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .file-block {
+            border: 2px dashed #bbb;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 15px;
+            background: #fafbff;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .file-block:hover {
+            border-color: #888;
+        }
+
+        .file-block input {
+            display: none;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #2a8df8;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: .2s;
+        }
+
+        .btn:hover {
+            background: #1f73cc;
+        }
+
+        .loading {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 14px;
+            color: #444;
+            display: none;
+        }
+
+        .success {
+            color: #2ecc71;
+            display: none;
+            margin-top: 12px;
+            text-align: center;
+        }
+
+    </style>
 </head>
+
 <body>
-  <div class="box">
-    <h2>Ad Share Calculator (Telegram Mini App)</h2>
-    <p>Загрузите два файла: основной и файл расходов. Нажмите «Рассчитать» — и получите результат.</p>
+    <div class="container">
+        <h2>📊 Расчёт доли рекламы</h2>
 
-    <label>Основной файл (main.xlsx)</label>
-    <input id="mainFile" type="file" accept=".xlsx,.xls" />
+        <label class="file-block">
+            <div id="main-label">📁 Загрузить основной файл</div>
+            <input type="file" id="main-file" accept=".xlsx,.xls">
+        </label>
 
-    <label>Файл расходов (payments.xlsx)</label>
-    <input id="payFile" type="file" accept=".xlsx,.xls" />
+        <label class="file-block">
+            <div id="payments-label">📁 Загрузить файл расходов</div>
+            <input type="file" id="payments-file" accept=".xlsx,.xls">
+        </label>
 
-    <button id="sendBtn">Рассчитать</button>
-    <div class="status" id="status"></div>
+        <button class="btn" onclick="upload()">Выполнить расчёт</button>
 
-    <hr/>
-    <p>Протестировать на примере загруженных файлов (только локально):</p>
-    <button id="useSample">Использовать тестовые файлы на сервере</button>
-    <div style="margin-top:16px;">
-      <small>Если приложение запускается из Telegram, при нажатии WebApp автоматически закроется — пользователь получит файл в браузере.</small>
+        <div class="loading" id="loading">⏳ Обрабатываем данные...</div>
+        <div class="success" id="success">✔ Файл готов!</div>
     </div>
-  </div>
+
 
 <script>
-  const statusEl = document.getElementById('status');
+let tg = window.Telegram.WebApp;
+tg.expand();
 
-  async function uploadAndProcess(mainBlob, payBlob) {
-    statusEl.textContent = 'Отправка файлов на сервер...';
-    const fd = new FormData();
-    fd.append('main_file', new Blob([mainBlob]), 'main.xlsx');
-    fd.append('payments_file', new Blob([payBlob]), 'payments.xlsx');
+document.getElementById("main-file").addEventListener("change", function() {
+    document.getElementById("main-label").innerHTML = "📄 " + this.files[0].name;
+});
 
-    try {
-      const resp = await fetch(window.location.href + 'process', {
-        method: 'POST',
-        body: fd
-      });
-      if (!resp.ok) {
-        const txt = await resp.text();
-        statusEl.textContent = 'Ошибка сервера: ' + resp.status + ' ' + txt;
+document.getElementById("payments-file").addEventListener("change", function() {
+    document.getElementById("payments-label").innerHTML = "📄 " + this.files[0].name;
+});
+
+async function upload() {
+    const main = document.getElementById("main-file").files[0];
+    const payments = document.getElementById("payments-file").files[0];
+
+    if (!main || !payments) {
+        alert("Пожалуйста, загрузите оба файла.");
         return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'main_with_ads.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      statusEl.textContent = 'Готово — файл скачан.';
-    } catch (err) {
-      statusEl.textContent = 'Ошибка: ' + err.message;
     }
-  }
 
-  document.getElementById('sendBtn').addEventListener('click', async () => {
-    const mainFile = document.getElementById('mainFile').files[0];
-    const payFile = document.getElementById('payFile').files[0];
-    if (!mainFile || !payFile) {
-      statusEl.textContent = 'Пожалуйста, выберите оба файла.';
-      return;
+    document.getElementById("loading").style.display = "block";
+    document.getElementById("success").style.display = "none";
+
+    const formData = new FormData();
+    formData.append("main_file", main);
+    formData.append("payments_file", payments);
+
+    const response = await fetch("/process", {
+        method: "POST",
+        body: formData
+    });
+
+    document.getElementById("loading").style.display = "none";
+
+    if (response.ok) {
+        const blob = await response.blob();
+        const link = document.createElement("a");
+
+        link.href = URL.createObjectURL(blob);
+        link.download = "result.xlsx";
+        link.click();
+
+        document.getElementById("success").style.display = "block";
+    } else {
+        alert("Ошибка: " + (await response.text()));
     }
-    const mainBuf = await mainFile.arrayBuffer();
-    const payBuf = await payFile.arrayBuffer();
-    await uploadAndProcess(mainBuf, payBuf);
-  });
-
-  // Кнопка для теста: использовать серверные примеры (только если они доступны)
-  document.getElementById('useSample').addEventListener('click', async () => {
-    statusEl.textContent = 'Запрос тестовых файлов на сервер...';
-    try {
-      // Серверу мы можем передать специальный флаг — но для простоты сделаем fetch к пути /process с использованием
-      // уже находящихся на сервере файлов (если backend поддержит). В текущем backend такого пути нет.
-      // Поэтому предложим пользователю скачать файл напрямую по специальному URL, если он доступен.
-      // В продакшне можно добавить отдельный эндпоинт, который вернёт тестовые файлы.
-      statusEl.textContent = 'Тестовая опция доступна локально (см. README) — на проде загружайте свои файлы.';
-    } catch (err) {
-      statusEl.textContent = 'Ошибка: ' + err.message;
-    }
-  });
-
-  // Telegram WebApp init (опционально)
-  if (window.Telegram && window.Telegram.WebApp) {
-    try {
-      window.Telegram.WebApp.expand();
-    } catch(e){}
-  }
+}
 </script>
+
 </body>
 </html>
