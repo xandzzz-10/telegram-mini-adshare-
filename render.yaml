@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: adshare-miniapp
+    name: telegram-mini-adshare
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: BOT_TOKEN
         sync: false
