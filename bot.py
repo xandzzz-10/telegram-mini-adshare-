@@ -12,7 +12,7 @@ if not TOKEN or not WEBAPP_URL:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [
-        [KeyboardButton("Открыть MiniApp", web_app=WebAppInfo(url=WEBAPP_URL))]
+        [KeyboardButton("Открыть MiniApp", web_app=WebAppInfo(url=https://telegram-mini-adshare-afxx.onrender.com/webapp))]
     ]
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Откройте Mini App:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 

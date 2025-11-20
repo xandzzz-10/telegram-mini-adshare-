@@ -1,7 +1,9 @@
 services:
   - type: web
-    name: adshare-backend
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -k uvicorn.workers.UvicornWorker app:app"
-
+    name: adshare-miniapp
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BOT_TOKEN
+        sync: false

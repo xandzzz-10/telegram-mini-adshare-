@@ -1,7 +1,7 @@
 fastapi
-uvicorn[standard]
+uvicorn
+jinja2
+python-multipart
+python-telegram-bot==20.7
 pandas
 openpyxl
-python-multipart
-jinja2
-python-telegram-bot==20.5
