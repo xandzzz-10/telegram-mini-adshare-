@@ -1,159 +1,56 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+import os
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
-import pandas as pd
-import io
-import tempfile
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+TOKEN = os.getenv("BOT_TOKEN", "8571133732:AA...")  # <-- свой токен
+WEBAPP_URL = "https://telegram-mini-adshare-afxx.onrender.com/webapp"
 
 app = FastAPI()
-
-# Разрешаем фронтенду Telegram обращаться к серверу
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Подключаем шаблоны
 templates = Jinja2Templates(directory="templates")
 
+telegram_app = ApplicationBuilder().token(TOKEN).build()
 
-# -------------------------------
-# РОУТЫ
-# -------------------------------
+# ---------- /start ----------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [KeyboardButton("Открыть мини-приложение",
+                        web_app=WebAppInfo(url=WEBAPP_URL))]
+    ]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    await update.message.reply_text("Добро пожаловать!", reply_markup=markup)
+
+telegram_app.add_handler(CommandHandler("start", start))
 
 
+# ---------- WEBHOOK ----------
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, telegram_app.bot)
+    await telegram_app.process_update(update)
+    return {"ok": True}
+
+
+# ---------- ВОТ ОНА /webapp ----------
 @app.get("/webapp", response_class=HTMLResponse)
 async def webapp(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+# ---------- STARTUP ----------
+@app.on_event("startup")
+async def on_startup():
+    webhook_url = "https://telegram-mini-adshare-afxx.onrender.com/webhook"
 
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
+    await telegram_app.bot.set_webhook(url=webhook_url)
 
-# -------------------------------
-# ОБРАБОТКА ФАЙЛОВ
-# -------------------------------
-
-def load_payments_bytes(file_bytes: bytes) -> pd.DataFrame:
-    df = pd.read_excel(io.BytesIO(file_bytes), header=None)
-
-    header_row = None
-    for i in range(min(10, len(df))):
-        row = df.iloc[i].astype(str).str.lower().tolist()
-        if any('sku' in c for c in row) or any('артикул' in c for c in row):
-            header_row = i
-            break
-
-    if header_row is None:
-        payments = pd.read_excel(io.BytesIO(file_bytes), header=0)
-    else:
-        payments = pd.read_excel(io.BytesIO(file_bytes), header=header_row)
-        payments = payments.loc[
-            ~payments.apply(lambda r: all(r == payments.columns), axis=1)
-        ].reset_index(drop=True)
-
-    payments.columns = [str(c).strip() for c in payments.columns]
-
-    col_sku = None
-    col_art = None
-    col_clicks = None
-    col_order = None
-
-    for c in payments.columns:
-        lc = c.lower()
-        if "sku" in lc:
-            col_sku = c
-        if "артикул" in lc:
-            col_art = c
-        if "клики" in lc or ("расход" in lc and "клики" in lc):
-            col_clicks = c
-        if "заказ" in lc:
-            col_order = c
-
-    if col_art is None:
-        for c in payments.columns:
-            if "артикул" in c.lower():
-                col_art = c
-
-    if col_clicks is None:
-        for c in payments.columns:
-            if "расход" in c.lower():
-                col_clicks = c
-
-    if col_clicks is None:
-        payments["Расход (оплата за клики)"] = 0
-        col_clicks = "Расход (оплата за клики)"
-
-    if col_order is None:
-        payments["Расход (оплата за заказ)"] = 0
-        col_order = "Расход (оплата за заказ)"
-
-    payments[col_clicks] = pd.to_numeric(payments[col_clicks], errors="coerce").fillna(0)
-    payments[col_order] = pd.to_numeric(payments[col_order], errors="coerce").fillna(0)
-
-    payments["total_ad_spend"] = payments[col_clicks] + payments[col_order]
-
-    if col_art:
-        payments = payments.rename(columns={col_art: "Артикул"})
-    elif col_sku:
-        payments = payments.rename(columns={col_sku: "Артикул"})
-    else:
-        raise ValueError("Не удалось определить колонку 'Артикул'")
-
-    return payments[["Артикул", "total_ad_spend"]]
-
-
-def compute_ad_share(main_bytes: bytes, payments_bytes: bytes) -> pd.DataFrame:
-    main = pd.read_excel(io.BytesIO(main_bytes))
-
-    if "Артикул" not in main.columns or "Заказано на сумму" not in main.columns:
-        raise ValueError("Нет нужных колонок в основном файле")
-
-    payments_spend = load_payments_bytes(payments_bytes)
-    ad_spend = payments_spend.groupby("Артикул", as_index=False)["total_ad_spend"].sum()
-
-    merged = main.merge(ad_spend, on="Артикул", how="left")
-    merged["total_ad_spend"] = merged["total_ad_spend"].fillna(0)
-
-    merged["Заказано на сумму"] = pd.to_numeric(
-        merged["Заказано на сумму"], errors="coerce"
-    )
-
-    def calc(row):
-        if row["Заказано на сумму"] == 0 or pd.isna(row["Заказано на сумму"]):
-            return None
-        return row["total_ad_spend"] / row["Заказано на сумму"]
-
-    merged["Доля рекламных расходов"] = merged.apply(calc, axis=1)
-    return merged
-
-
-@app.post("/process")
-async def process_files(main_file: UploadFile = File(...), payments_file: UploadFile = File(...)):
-    try:
-        main_bytes = await main_file.read()
-        payments_bytes = await payments_file.read()
-
-        result = compute_ad_share(main_bytes, payments_bytes)
-
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-        result.to_excel(tmp.name, index=False)
-
-        return FileResponse(
-            tmp.name,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename="result.xlsx"
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    logger.info("Webhook установлен!")
